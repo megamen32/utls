@@ -62,6 +62,31 @@ func (q *UQUICConn) ApplyPreset(p *ClientHelloSpec) error {
 	return q.conn.ApplyPreset(p)
 }
 
+// StoreSession stores a session previously received in a QUICStoreSession
+// event in the ClientSessionCache.
+//
+// The application may process additional events or modify the SessionState
+// before storing the session.
+//
+// This is the counterpart of the same method on QUICConn, and it is upstream's
+// own code: a connection that carries a custom ClientHello could not keep a
+// session before, so it could never resume. The hello of a resuming
+// connection carries the pre_shared_key extension, and without a stored
+// session there was nothing to offer.
+func (q *UQUICConn) StoreSession(session *SessionState) error {
+	c := q.conn
+	if !c.isClient {
+		return quicError(errors.New("tls: StoreSessionTicket called on the server"))
+	}
+	cacheKey := c.clientSessionCacheKey()
+	if cacheKey == "" {
+		return nil
+	}
+	cs := &ClientSessionState{session: session}
+	c.config.ClientSessionCache.Put(cacheKey, cs)
+	return nil
+}
+
 // NextEvent returns the next event occurring on the connection.
 // It returns an event with a Kind of QUICNoEvent when no events are available.
 func (q *UQUICConn) NextEvent() QUICEvent {
